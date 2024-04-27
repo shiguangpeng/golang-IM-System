@@ -55,13 +55,17 @@ func (this *Server) Handler(conn net.Conn) {
 	// handler
 	//fmt.Println("连接建立成功！")
 	// 用户上线，将用户加入到onlinemap中
-	user := NewUser(conn)
-	this.mapLock.Lock()
-	this.OnlineMap[user.Name] = user
-	this.mapLock.Unlock()
+	//user := NewUser(conn)
+	// 用户与server关联
+	user := NewUser(conn, this)
+	user.Online()
+	// v0.4将下面user的逻辑挪到User中
+	//this.mapLock.Lock()
+	//this.OnlineMap[user.Name] = user
+	//this.mapLock.Unlock()
 
 	// 广播用户上线消息
-	this.Broadcast(user, "上线")
+	//this.Broadcast(user, "上线")
 
 	// 接受客户端发送的消息
 	go func() {
@@ -69,7 +73,8 @@ func (this *Server) Handler(conn net.Conn) {
 		for {
 			n, err := conn.Read(buf)
 			if n == 0 {
-				this.Broadcast(user, "下线")
+				user.Offline()
+				//this.Broadcast(user, "下线")
 				return
 			}
 			if err != nil && err != io.EOF {
@@ -79,8 +84,9 @@ func (this *Server) Handler(conn net.Conn) {
 
 			// 去除尾零，在控制台按下enter时，发送消息带的\n
 			msg := string(buf[:n-1])
+			user.DoMessage(msg)
 			// 广播客户端的消息
-			this.Broadcast(user, msg)
+			//this.Broadcast(user, msg)
 		}
 	}()
 
