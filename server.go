@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 )
 
 type Server struct {
@@ -59,13 +60,9 @@ func (this *Server) Handler(conn net.Conn) {
 	// 用户与server关联
 	user := NewUser(conn, this)
 	user.Online()
-	// v0.4将下面user的逻辑挪到User中
-	//this.mapLock.Lock()
-	//this.OnlineMap[user.Name] = user
-	//this.mapLock.Unlock()
 
-	// 广播用户上线消息
-	//this.Broadcast(user, "上线")
+	// 监听用户是否活跃的channel
+	isLive := make(chan bool)
 
 	// 接受客户端发送的消息
 	go func() {
@@ -87,11 +84,35 @@ func (this *Server) Handler(conn net.Conn) {
 			user.DoMessage(msg)
 			// 广播客户端的消息
 			//this.Broadcast(user, msg)
+
+			// 用户的任意操作代表当前用户活跃
+			isLive <- true
 		}
 	}()
 
 	// 当前handler阻塞
-	select {}
+	// v0.7 超时强踢功能
+	// 相当于while true
+	for {
+		select {
+		case <-isLive:
+			// 当前用户是活跃的，重置定时器
+			// 不做任何事，为了触发下面的定时器
+		case <-time.After(time.Second * 10):
+			// 已经超时
+			// 将当前的User强制关闭
+			user.SendMsg("你被踢了。")
+
+			// 销毁用的资源
+			close(user.C)
+			// 关闭连接
+			err := conn.Close()
+			if err != nil {
+				return
+			}
+		}
+	}
+
 }
 
 // 启动服务器的接口
