@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"net"
+	"os"
 )
 
 type Client struct {
@@ -32,6 +34,30 @@ func NewClient(serverIp string, serverPort int) *Client {
 	return client
 }
 
+// DealResponse v0.9 单独开一个go routine来处理服务器回应的消息，直接显示到标准输出即可
+func (this *Client) DealResponse() {
+	// 阻塞方法，一旦conn中有数据，就往标准输出中写
+	_, err := io.Copy(os.Stdout, this.conn)
+	if err != nil {
+		return
+	}
+}
+
+// UpdateName v0.9 更新用户名
+func (client *Client) UpdateName() bool {
+	fmt.Println(">>>>>>请输入用户名：")
+	fmt.Scanln(&client.Name)
+
+	sendMsg := "rename|" + client.Name + "\n"
+	_, err := client.conn.Write([]byte(sendMsg))
+	if err != nil {
+		fmt.Println("conn.Write err", err)
+		return false
+	}
+
+	return true
+}
+
 // v0.9-菜单显示
 func (this *Client) menu() bool {
 	var flag int
@@ -54,14 +80,14 @@ func (this *Client) menu() bool {
 	}
 }
 
-// 根据输入执行对应的业务
-func (client Client) Run() {
-	for client.flag != 0 {
+// Run 根据输入执行对应的业务
+func (this *Client) Run() {
+	for this.flag != 0 {
 		// 直到输入正确才不循环
-		for client.menu() != true {
+		for this.menu() != true {
 		}
 		// 根据不同的flag处理不同的业务
-		switch client.flag {
+		switch this.flag {
 		case 1:
 			// 公聊模式
 			break
@@ -70,6 +96,7 @@ func (client Client) Run() {
 			break
 		case 3:
 			// 更新用户名
+			this.UpdateName()
 			break
 		}
 	}
@@ -92,6 +119,12 @@ func main() {
 		fmt.Println(">>>>>> 连接服务器失败 <<<<<<<<<<")
 		return
 	}
+
+	go client.DealResponse()
+
 	fmt.Println(">>>>>> 连接服务器成功 <<<<<<<<<<")
+
+	// 启动客户端的业务
+	client.Run()
 
 }
