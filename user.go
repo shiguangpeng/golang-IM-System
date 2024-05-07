@@ -1,6 +1,9 @@
 package main
 
-import "net"
+import (
+	"net"
+	"strings"
+)
 
 // 用户类跟server交互
 type User struct {
@@ -45,9 +48,48 @@ func (this *User) Offline() {
 	this.server.Broadcast(this, "下线")
 }
 
+// v0.5 给指定用户发消息
+func (this *User) SendMsg(msg string) {
+	write, err := this.conn.Write([]byte(msg))
+	if err != nil && write > 0 {
+		return
+	}
+}
+
 // v0.4新增：用户处理消息的业务
+// v0.5新增：输入特定消息，如who，可以查询当前在线用户有哪些
 func (this *User) DoMessage(msg string) {
-	this.server.Broadcast(this, msg)
+
+	// v0.5
+	// 查询当前用户都有哪些
+	if msg == "who" {
+		this.server.mapLock.Lock()
+		for _, user := range this.server.OnlineMap {
+			onlineMsg := "[" + user.Addr + "]" + user.Name + "上线...\n"
+			this.SendMsg(onlineMsg)
+		}
+		this.server.mapLock.Unlock()
+	} else if len(msg) > 7 && msg[0:7] == "rename" {
+		//v0.6 修改用户名
+		newName := strings.Split(msg, "|")[1]
+		// 判断要修改的名字是否存在
+		_, ok := this.server.OnlineMap[newName]
+		if ok {
+			this.SendMsg("用户名已经存在")
+		} else {
+			// V0.6
+			// 更新用户名
+			this.server.mapLock.Lock()
+			this.server.OnlineMap[newName] = this
+			this.server.mapLock.Unlock()
+
+			this.Name = newName
+			this.SendMsg("您已经更新用户名：" + this.Name + "\n")
+		}
+	} else {
+		// v0.4
+		this.server.Broadcast(this, msg)
+	}
 }
 
 // 监听当前User channel的方法，一旦有消息，就发送出去
